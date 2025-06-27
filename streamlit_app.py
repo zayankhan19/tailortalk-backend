@@ -1,30 +1,35 @@
 import streamlit as st
 import requests
 
-st.title("🧵 TailorTalk - Book Your Appointment")
-st.write("Chat with the assistant to schedule a meeting.")
+st.set_page_config(page_title="TailorTalk Appointment", layout="centered")
+st.title("👗 TailorTalk Appointment Chatbot")
 
-history = st.session_state.get("history", [])
+# Store chat history in session
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-user_input = st.text_input("You:", key="input")
+# Chat input
+user_input = st.chat_input("Type your message here...")
+
 if user_input:
-    response = requests.post("http://localhost:8000/book", json={"message": user_input})
-    bot_reply = response.json()["response"]
-    history.append((user_input, bot_reply))
-    st.session_state.history = history
+    st.session_state.messages.append({"role": "user", "content": user_input})
 
-for user, bot in history:
-    st.markdown(f"**You:** {user}")
-    st.markdown(f"**TailorTalk:** {bot}")
-import streamlit as st
+    # Send request to FastAPI
+    try:
+        response = requests.post("http://localhost:8000/book", json={"message": user_input})
+        if response.status_code == 200:
+            reply = response.json().get("response", "🤖 No reply from server.")
+        else:
+            reply = "❌ Error contacting backend."
+    except Exception as e:
+        reply = f"❌ Backend connection error: {e}"
 
-st.set_page_config(page_title="Test App", layout="centered")
+    st.session_state.messages.append({"role": "bot", "content": reply})
 
-st.title("🎈 Hello, Streamlit!")
-st.write("This is a test to check if your Streamlit is working correctly.")
-
-# Optional: Add interaction
-if st.button("Click Me"):
-    st.success("Streamlit is working! 🎉")
-
+# Display conversation
+for msg in st.session_state.messages:
+    if msg["role"] == "user":
+        st.chat_message("user").write(msg["content"])
+    else:
+        st.chat_message("assistant").write(msg["content"])
 

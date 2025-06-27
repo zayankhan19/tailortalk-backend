@@ -1,38 +1,47 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from datetime import datetime
-import re
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from dateparser.search import search_dates
 
 app = FastAPI()
 
-# Dummy calendar with availability
+# Enable CORS for Streamlit frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Define some dummy available slots
 available_slots = {
     "2025-06-27": ["10:00", "11:00", "14:00"],
-    "2025-06-28": ["09:00", "13:00", "15:00"]
+    "2025-06-28": ["12:00", "15:00"],
+    "2025-07-01": ["09:00", "13:00", "16:00"],
 }
 
-class BookingRequest(BaseModel):
-    message: str
 
 @app.post("/book")
-async def book_slot(req: BookingRequest):
-    msg = req.message.lower()
+async def book(request: Request):
+    data = await request.json()
+    message = data.get("message", "")
 
-    # Try to extract a date
-    date_match = re.search(r"2025-06-2[7-8]", msg)
-    time_match = re.search(r"(09|10|11|13|14|15):00", msg)
+    # Use search_dates to extract date and time from sentence
+    found = search_dates(message)
 
-    if date_match and time_match:
-        date = date_match.group()
-        time = time_match.group()
+    if found:
+        _, dt = found[0]
+        date = dt.strftime("%Y-%m-%d")
+        time = dt.strftime("%H:%M")
+
         if date in available_slots and time in available_slots[date]:
             available_slots[date].remove(time)
             return {"response": f"✅ Booked slot on {date} at {time}"}
+        elif date in available_slots:
+            available = ", ".join(available_slots[date])
+            return {"response": f"🗓 These times are still available on {date}: {available}"}
         else:
-            return {"response": "❌ That slot is not available. Try another one."}
-    elif date_match:
-        date = date_match.group()
-        available = ', '.join(available_slots.get(date, []))
-        return {"response": f"🗓 Available times on {date}: {available}"}
+            return {"response": f"❌ No slots on {date}. Try another day."}
     else:
-        return {"response": "🤖 Please mention a valid date like '2025-06-27' and a time like '10:00'."}
+        return {
+            "response": "🤖 Please mention a valid date like '2025-06-27' and a time like '10:00'."
+        }
